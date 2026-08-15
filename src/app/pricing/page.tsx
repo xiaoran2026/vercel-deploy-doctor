@@ -18,7 +18,7 @@ export default function PricingPage() {
     const body = encodeURIComponent(
       `I want to join the Deploy Doctor waitlist!\n\nEmail: ${email}\nInterested plan: ${plan}\n\nMy Vercel app URL (optional): `
     );
-    window.location.href = `mailto:founders@store-leak.com?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:wendyens0038@gmail.com?subject=${subject}&body=${body}`;
     setSubmitted(true);
   };
 
@@ -178,8 +178,8 @@ export default function PricingPage() {
                 </p>
                 <p className="mt-3 text-xs text-gray-500">
                   Didn&apos;t open? Email us directly at{" "}
-                  <a href="mailto:founders@store-leak.com" className="text-indigo-600 underline">
-                    founders@store-leak.com
+                  <a href="mailto:wendyens0038@gmail.com" className="text-indigo-600 underline">
+                    wendyens0038@gmail.com
                   </a>
                 </p>
               </div>
@@ -234,8 +234,8 @@ export default function PricingPage() {
           <p className="text-xs text-center text-gray-500">
             All prices in USD. Early-bird discount locks in when you create an account during pre-launch.
             Cancel anytime. Questions? Email{" "}
-            <a className="text-gray-700 underline" href="mailto:founders@store-leak.com">
-              founders@store-leak.com
+            <a className="text-gray-700 underline" href="mailto:wendyens0038@gmail.com">
+              wendyens0038@gmail.com
             </a>
             .
           </p>
