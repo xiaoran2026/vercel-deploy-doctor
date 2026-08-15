@@ -82,9 +82,10 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get<any>(`/api/checks?page=${page}&size=20`);
-      setChecks(res.data.items ?? []);
-      setTotal(res.data.total ?? 0);
+      const res = await api.get<any>(`/checks?page=${page}&size=20`);
+      const payload = res.data?.data ?? res.data;
+      setChecks(payload.items ?? []);
+      setTotal(payload.total ?? 0);
     } finally {
       setLoading(false);
     }
@@ -98,18 +99,18 @@ export default function DashboardPage() {
     const id = pendingCheckId;
     const timer = setInterval(async () => {
       try {
-        const res = await api.get<any>(`/api/checks/${id}`);
-        const s: CheckStatus = res.data.status;
+        const res = await api.get<any>(`/checks/${id}`);
+        const payload = res.data?.data ?? res.data;
+        const s: CheckStatus = payload.status;
         if (s === "COMPLETED" || s === "FAILED" || s === "CANCELLED") {
           clearInterval(timer);
           setPendingCheckId(null);
           await load();
         } else {
-          // Optimistically update list row
           setChecks((list) =>
             list.map((c) =>
               c.id === id
-                ? { ...c, status: s, progress: res.data.progress ?? c.progress, currentStep: res.data.currentStep ?? c.currentStep }
+                ? { ...c, status: s, progress: payload.progress ?? c.progress, currentStep: payload.currentStep ?? c.currentStep }
                 : c
             )
           );
@@ -125,27 +126,28 @@ export default function DashboardPage() {
     if (!targetUrl.trim()) { setError("Enter a deployed URL to scan."); return; }
     setSubmitting(true);
     try {
-      const res = await api.post<any>("/api/checks", {
+      const res = await api.post<any>("/checks", {
         targetUrl: targetUrl.trim(),
         includePerformance: opts.perf,
         includeSecurity: opts.sec,
         includeLighthouse: opts.lh,
         includeConfig: opts.cfg,
       });
-      setPendingCheckId(res.data.checkId);
+      const payload = res.data?.data ?? res.data;
+      setPendingCheckId(payload.checkId);
       setTargetUrl("");
       // Prepend a synthetic optimistic row
       const synth: CheckRow = {
-        id: res.data.checkId,
+        id: payload.checkId,
         targetUrl: targetUrl.trim(),
-        status: res.data.status ?? "RUNNING",
-        progress: res.data.progress ?? 10,
-        currentStep: res.data.currentStep ?? "Starting",
+        status: payload.status ?? "RUNNING",
+        progress: payload.progress ?? 10,
+        currentStep: payload.currentStep ?? "Starting",
         errorMessage: null,
         createdAt: new Date().toISOString(),
         startedAt: new Date().toISOString(),
         completedAt: null,
-        report: null,
+        report: payload.reportId ? { id: payload.reportId, overallScore: 0, status: "COMPLETED" } : null,
       };
       setChecks((c) => [synth, ...c]);
       setTotal((t) => t + 1);
