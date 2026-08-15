@@ -1,28 +1,53 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Sparkles } from "lucide-react";
+import { ArrowRight, Check, Sparkles, Mail, Clock, Zap } from "lucide-react";
 import { PLANS } from "@/lib/planConfig";
 
 export default function PricingPage() {
+  const [email, setEmail] = useState("");
+  const [plan, setPlan] = useState("STARTER");
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleWaitlist = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    // Open mailto with pre-filled content so the founder receives every waitlist sign-up
+    const subject = encodeURIComponent(`Waitlist — ${plan} plan`);
+    const body = encodeURIComponent(
+      `I want to join the Deploy Doctor waitlist!\n\nEmail: ${email}\nInterested plan: ${plan}\n\nMy Vercel app URL (optional): `
+    );
+    window.location.href = `mailto:founders@store-leak.com?subject=${subject}&body=${body}`;
+    setSubmitted(true);
+  };
+
+  const scrollToWaitlist = (planId: string) => {
+    setPlan(planId);
+    document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   return (
     <div className="min-h-screen py-16 md:py-20">
       <div className="max-w-6xl mx-auto px-4 md:px-6">
+        {/* Header */}
         <div className="text-center max-w-2xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold">
             <Sparkles className="w-3.5 h-3.5" />
-            Pre-launch pricing · All paid tiers 37% OFF · Locked in forever
+            Pre-launch · Paid plans opening soon · Join waitlist for 37% OFF forever
           </div>
           <h1 className="mt-6 text-4xl md:text-5xl font-bold tracking-tight">
             Simple, honest pricing
           </h1>
           <p className="mt-4 text-base text-gray-600 leading-relaxed">
-            Start free forever. Upgrade when you want scheduled checks, CI integration, and AI fix recipes.
+            Start free forever. Paid plans are in private beta — join the waitlist
+            and lock in early-bird pricing before we go live.
           </p>
         </div>
 
+        {/* Pricing cards */}
         <div className="mt-12 grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {PLANS.map((p, idx) => {
+          {PLANS.map((p) => {
             const earlyBird: Record<string, { display: string; original: string } | null> = {
               FREE: null,
               STARTER: { display: "$12", original: "$19" },
@@ -32,6 +57,8 @@ export default function PricingPage() {
             const eb = earlyBird[p.id];
             const badge = p.badge ?? (eb ? "Early Bird · -37%" : null);
             const highlight = p.popular;
+            const isFree = p.id === "FREE";
+
             return (
               <div
                 key={p.id}
@@ -61,7 +88,7 @@ export default function PricingPage() {
                     <>
                       <p className={`text-4xl font-bold tracking-tight ${highlight ? "text-white" : "text-gray-950"}`}>{eb.display}</p>
                       <p className={`text-sm mb-1 font-medium line-through ${highlight ? "text-white/40" : "text-gray-400"}`}>{eb.original}</p>
-                      <p className={`text-sm mb-1 font-medium ${highlight ? "text-white/60" : "text-gray-500"}`}>{p.price ? "/mo" : ""}</p>
+                      <p className={`text-sm mb-1 font-medium ${highlight ? "text-white/60" : "text-gray-500"}`}>/mo</p>
                     </>
                   ) : (
                     <p className={`text-4xl font-bold tracking-tight ${highlight ? "text-white" : "text-gray-950"}`}>
@@ -70,17 +97,32 @@ export default function PricingPage() {
                   )}
                 </div>
 
-                <Link
-                  href="/register"
-                  className={`mt-5 inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-xl text-sm font-semibold transition-colors ${
-                    highlight
-                      ? "bg-white text-gray-950 hover:bg-gray-100"
-                      : "bg-gray-950 text-white hover:bg-gray-800"
-                  }`}
-                >
-                  {idx === PLANS.length - 1 ? "Talk to us" : "Get started"}
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
+                {/* CTA button */}
+                {isFree ? (
+                  <Link
+                    href="/register"
+                    className={`mt-5 inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-xl text-sm font-semibold transition-colors ${
+                      highlight
+                        ? "bg-white text-gray-950 hover:bg-gray-100"
+                        : "bg-gray-950 text-white hover:bg-gray-800"
+                    }`}
+                  >
+                    Start free
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => scrollToWaitlist(p.id)}
+                    className={`mt-5 inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-xl text-sm font-semibold transition-colors ${
+                      highlight
+                        ? "bg-white text-gray-950 hover:bg-gray-100"
+                        : "bg-gray-950 text-white hover:bg-gray-800"
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    Join waitlist
+                  </button>
+                )}
 
                 <div className={`mt-6 space-y-2.5 text-sm flex-1 ${highlight ? "text-white/80" : "text-gray-700"}`}>
                   {p.features.map((f) => (
@@ -90,15 +132,112 @@ export default function PricingPage() {
                     </div>
                   ))}
                 </div>
+
+                {/* Paid plan badge: "Coming soon" */}
+                {!isFree && (
+                  <div className={`mt-4 pt-4 border-t ${highlight ? "border-white/10" : "border-gray-100"}`}>
+                    <p className={`text-[11px] font-medium ${highlight ? "text-white/50" : "text-gray-400"}`}>
+                      🔒 Paid plans open in ~10 days. Join the waitlist to lock in early-bird pricing.
+                    </p>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
 
+        {/* Waitlist form */}
+        <div id="waitlist" className="mt-14 scroll-mt-8">
+          <div className="max-w-2xl mx-auto rounded-3xl border border-indigo-200 bg-gradient-to-br from-indigo-50/80 via-white to-violet-50/60 p-6 sm:p-10 shadow-sm">
+            <div className="text-center">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-indigo-200 text-indigo-700 text-[11px] font-semibold">
+                <Zap className="w-3.5 h-3.5" />
+                Early Bird Waitlist
+              </div>
+              <h2 className="mt-4 text-2xl font-bold tracking-tight text-gray-950">
+                Lock in 37% off — forever
+              </h2>
+              <p className="mt-2 text-sm text-gray-600 leading-relaxed">
+                Paid plans open in ~10 days. Drop your email and pick a plan —
+                we&apos;ll notify you the moment checkout goes live.
+                First 50 sign-ups get the early-bird price locked for life.
+              </p>
+            </div>
+
+            {submitted ? (
+              <div className="mt-8 rounded-2xl bg-white border border-emerald-200 p-6 text-center">
+                <div className="w-12 h-12 mx-auto rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <Check className="w-6 h-6" />
+                </div>
+                <h3 className="mt-4 text-lg font-semibold text-gray-950">
+                  You&apos;re on the list!
+                </h3>
+                <p className="mt-1.5 text-sm text-gray-600">
+                  Your email client should have opened with a pre-filled message.
+                  Just hit send and we&apos;ll add you to the early-bird list.
+                </p>
+                <p className="mt-3 text-xs text-gray-500">
+                  Didn&apos;t open? Email us directly at{" "}
+                  <a href="mailto:founders@store-leak.com" className="text-indigo-600 underline">
+                    founders@store-leak.com
+                  </a>
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handleWaitlist} className="mt-6 space-y-4">
+                <div>
+                  <label htmlFor="email" className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Email address
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="mt-1.5 w-full h-12 px-4 rounded-xl border border-gray-200 bg-white text-sm text-gray-950 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="plan" className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Interested plan
+                  </label>
+                  <select
+                    id="plan"
+                    value={plan}
+                    onChange={(e) => setPlan(e.target.value)}
+                    className="mt-1.5 w-full h-12 px-4 rounded-xl border border-gray-200 bg-white text-sm text-gray-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+                  >
+                    <option value="STARTER">Starter — $12/mo (early bird, was $19)</option>
+                    <option value="GROWTH">Growth — $32/mo (early bird, was $49)</option>
+                    <option value="AGENCY">Agency — $99/mo (early bird, was $149)</option>
+                  </select>
+                </div>
+                <button
+                  type="submit"
+                  className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-gray-950 text-white text-sm font-semibold hover:bg-gray-800 transition-colors"
+                >
+                  <Mail className="w-4 h-4" />
+                  Join the waitlist
+                </button>
+                <p className="text-center text-[11px] text-gray-500">
+                  We&apos;ll only email you about launch &amp; product updates. No spam, ever.
+                </p>
+              </form>
+            )}
+          </div>
+        </div>
+
+        {/* Footer note */}
         <div className="mt-10 rounded-2xl border border-gray-200 bg-white p-5">
           <p className="text-xs text-center text-gray-500">
             All prices in USD. Early-bird discount locks in when you create an account during pre-launch.
-            Cancel anytime. Questions? Email <a className="text-gray-700 underline" href="mailto:founders@deploydoctor.dev">founders@deploydoctor.dev</a>.
+            Cancel anytime. Questions? Email{" "}
+            <a className="text-gray-700 underline" href="mailto:founders@store-leak.com">
+              founders@store-leak.com
+            </a>
+            .
           </p>
         </div>
       </div>
