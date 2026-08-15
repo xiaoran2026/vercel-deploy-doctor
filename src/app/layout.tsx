@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { I18nProvider } from "@/lib/i18n/I18nContext";
+import { Analytics } from "@vercel/analytics/react";
 
 export const metadata: Metadata = {
   title: "Deploy Doctor for Vercel — Catch regressions before your users do",
@@ -31,6 +32,7 @@ export default function RootLayout({
         <I18nProvider>
           <AuthProvider>{children}</AuthProvider>
         </I18nProvider>
+        <Analytics />
       </body>
     </html>
   );
