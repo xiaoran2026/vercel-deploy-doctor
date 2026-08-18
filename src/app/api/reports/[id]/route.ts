@@ -1,35 +1,52 @@
 /**
  * GET  /api/reports/[id] → full report with findings
+ * - Accepts either reportId or checkId for robustness
+ * - Supports authenticated users (userId matches) and guests (guestId matches via cookie)
  */
 import { NextResponse } from "next/server";
 import prisma from "@/lib/server/prisma";
-import { authenticateRequest } from "@/lib/server/auth";
+import { optionalAuthRequest, extractGuestId } from "@/lib/server/auth";
 import { handleApiError, ApiError } from "@/lib/server/validation";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, { params }: Params) {
   try {
-    const user = await authenticateRequest(_request);
+    const authResult = await optionalAuthRequest(_request);
+    const isAuthenticated = "userId" in authResult;
     const { id } = await params;
 
-    // Accept either reportId or checkId for robustness
-    let report = await prisma.report.findUnique({
-      where: { id, userId: user.userId },
-      include: {
-        check: { select: { id: true, targetUrl: true, status: true, createdAt: true, completedAt: true } },
-        findings: { orderBy: [{ severity: "asc" }, { category: "asc" }] },
-      },
-    });
+    let report: any = null;
+    const includeOpts = {
+      check: { select: { id: true, targetUrl: true, status: true, createdAt: true, completedAt: true } },
+      findings: { orderBy: [{ severity: "asc" as const }, { category: "asc" as const }] },
+    };
 
-    if (!report) {
-      report = await prisma.report.findFirst({
-        where: { checkId: id, userId: user.userId },
-        include: {
-          check: { select: { id: true, targetUrl: true, status: true, createdAt: true, completedAt: true } },
-          findings: { orderBy: [{ severity: "asc" }, { category: "asc" }] },
-        },
+    if (isAuthenticated) {
+      const userId = (authResult as any).userId;
+      report = await prisma.report.findUnique({
+        where: { id, userId },
+        include: includeOpts,
       });
+      if (!report) {
+        report = await prisma.report.findFirst({
+          where: { checkId: id, userId },
+          include: includeOpts,
+        });
+      }
+    } else {
+      const guestId = extractGuestId(_request);
+      if (!guestId) throw new ApiError("Unauthorized", 401, "UNAUTHORIZED");
+      report = await prisma.report.findUnique({
+        where: { id, guestId },
+        include: includeOpts,
+      });
+      if (!report) {
+        report = await prisma.report.findFirst({
+          where: { checkId: id, guestId },
+          include: includeOpts,
+        });
+      }
     }
 
     if (!report) throw new ApiError("Report not found", 404, "NOT_FOUND");
@@ -58,7 +75,7 @@ export async function GET(_request: Request, { params }: Params) {
         createdAt: report.createdAt,
         completedAt: report.completedAt,
         check: report.check,
-        findings: report.findings.map((f) => ({
+        findings: report.findings.map((f: any) => ({
           id: f.id,
           category: f.category,
           severity: f.severity,

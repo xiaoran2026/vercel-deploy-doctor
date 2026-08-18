@@ -338,12 +338,13 @@ export default function HomePage() {
                 caching, vercel.json, performance, SEO, a11y — with the exact code snippet to fix each finding.
               </p>
 
-              {/* Input */}
+              {/* Input — No signup Quick Scan */}
               <form
                 className="mt-8 max-w-xl"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  window.location.href = `/register?next=/check&url=${encodeURIComponent(url)}`;
+                  if (!url.trim()) return;
+                  window.location.href = `/check?url=${encodeURIComponent(url.trim())}`;
                 }}
               >
                 <div className="flex flex-col sm:flex-row gap-2.5 p-1.5 rounded-2xl border border-gray-200 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_32px_rgba(15,23,42,0.06)]">
@@ -365,9 +366,9 @@ export default function HomePage() {
                   </button>
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] font-medium text-gray-500">
-                  <span className="inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> No Vercel token required</span>
+                  <span className="inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> No signup required</span>
                   <span className="inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Under 30 seconds</span>
-                  <span className="inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Free — up to 3 checks / month</span>
+                  <span className="inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Free scan</span>
                 </div>
               </form>
             </div>

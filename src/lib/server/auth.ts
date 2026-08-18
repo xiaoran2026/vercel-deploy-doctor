@@ -100,3 +100,30 @@ export async function optionalAuthRequest(request: Request): Promise<Authenticat
     return { user: null };
   }
 }
+
+const GUEST_COOKIE = 'dd_guest_id';
+
+/** Generate or return the existing guest id from cookies. */
+export function getOrCreateGuestId(request: Request): { id: string; isNew: boolean; existing: string | null } {
+  const cookie = request.headers.get('cookie') || '';
+  const match = cookie.match(new RegExp(`(?:^|;\\s*)${GUEST_COOKIE}=([^;]+)`));
+  if (match && match[1]) return { id: match[1], isNew: false, existing: match[1] };
+  const fresh = crypto.randomUUID();
+  return { id: fresh, isNew: true, existing: null };
+}
+
+/** Attach Set-Cookie for guestId to an existing Response by rebuilding with new headers. */
+export function setGuestCookie(response: Response, guestId: string): Response {
+  const headers = new Headers(response.headers);
+  headers.append(
+    'Set-Cookie',
+    `${GUEST_COOKIE}=${guestId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${90 * 24 * 60 * 60}`
+  );
+  return new Response(response.body, { headers, status: response.status, statusText: response.statusText });
+}
+
+export function extractGuestId(request: Request): string | null {
+  const cookie = request.headers.get('cookie') || '';
+  const match = cookie.match(new RegExp(`(?:^|;\\s*)${GUEST_COOKIE}=([^;]+)`));
+  return match ? match[1] : null;
+}

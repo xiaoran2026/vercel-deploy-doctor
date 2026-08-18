@@ -2,24 +2,35 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Sparkles, Mail, Clock, Zap } from "lucide-react";
+import { ArrowRight, Check, Sparkles, Mail, Clock, Zap, Loader2 } from "lucide-react";
 import { PLANS } from "@/lib/planConfig";
+import axios from "axios";
 
 export default function PricingPage() {
   const [email, setEmail] = useState("");
   const [plan, setPlan] = useState("STARTER");
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleWaitlist = (e: React.FormEvent) => {
+  const handleWaitlist = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
-    // Open mailto with pre-filled content so the founder receives every waitlist sign-up
-    const subject = encodeURIComponent(`Waitlist — ${plan} plan`);
-    const body = encodeURIComponent(
-      `I want to join the Deploy Doctor waitlist!\n\nEmail: ${email}\nInterested plan: ${plan}\n\nMy Vercel app URL (optional): `
-    );
-    window.location.href = `mailto:wendyens0038@gmail.com?subject=${subject}&body=${body}`;
-    setSubmitted(true);
+    setError(null);
+    setSubmitting(true);
+    try {
+      await axios.post("/api/waitlist", {
+        email: email.trim(),
+        plan,
+        source: "pricing",
+      });
+      setSubmitted(true);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "Something went wrong. Please try again.";
+      setError(msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const scrollToWaitlist = (planId: string) => {
@@ -170,21 +181,20 @@ export default function PricingPage() {
                   <Check className="w-6 h-6" />
                 </div>
                 <h3 className="mt-4 text-lg font-semibold text-gray-950">
-                  You&apos;re on the list!
+                  You&apos;re on the list! 🎉
                 </h3>
                 <p className="mt-1.5 text-sm text-gray-600">
-                  Your email client should have opened with a pre-filled message.
-                  Just hit send and we&apos;ll add you to the early-bird list.
-                </p>
-                <p className="mt-3 text-xs text-gray-500">
-                  Didn&apos;t open? Email us directly at{" "}
-                  <a href="mailto:wendyens0038@gmail.com" className="text-indigo-600 underline">
-                    wendyens0038@gmail.com
-                  </a>
+                  We saved your spot. The 37% early-bird discount is locked in for you.
+                  We&apos;ll email you the moment paid plans go live.
                 </p>
               </div>
             ) : (
               <form onSubmit={handleWaitlist} className="mt-6 space-y-4">
+                {error && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                    {error}
+                  </div>
+                )}
                 <div>
                   <label htmlFor="email" className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Email address
@@ -216,10 +226,20 @@ export default function PricingPage() {
                 </div>
                 <button
                   type="submit"
-                  className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-gray-950 text-white text-sm font-semibold hover:bg-gray-800 transition-colors"
+                  disabled={submitting}
+                  className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-gray-950 text-white text-sm font-semibold hover:bg-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Mail className="w-4 h-4" />
-                  Join the waitlist
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Joining...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4" />
+                      Join the waitlist
+                    </>
+                  )}
                 </button>
                 <p className="text-center text-[11px] text-gray-500">
                   We&apos;ll only email you about launch &amp; product updates. No spam, ever.

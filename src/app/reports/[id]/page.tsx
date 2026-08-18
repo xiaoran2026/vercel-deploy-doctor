@@ -4,12 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import type { DeployReport, Finding, Severity, FindingCategory } from "@/lib/types";
 import {
   Activity,
   AlertCircle,
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   CheckCircle2,
   ExternalLink,
   Gauge,
@@ -105,6 +107,8 @@ export default function ReportPage() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
+  const { user } = useAuth();
+  const isAuthenticated = !!user;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +116,7 @@ export default function ReportPage() {
   const [openFinding, setOpenFinding] = useState<string | null>(null);
   const [catFilter, setCatFilter] = useState<CategoryFilter>("ALL");
   const [sevFilter, setSevFilter] = useState<SeverityFilter>("ALL");
+  const [showBanner, setShowBanner] = useState(true);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -198,12 +203,48 @@ export default function ReportPage() {
     <div className="min-h-screen bg-gray-50/50">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
         {/* Back */}
-        <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900">
-          <ArrowLeft className="w-4 h-4" /> Back to dashboard
+        <Link
+          href={isAuthenticated ? "/dashboard" : "/"}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900"
+        >
+          <ArrowLeft className="w-4 h-4" /> {isAuthenticated ? "Back to dashboard" : "Back to home"}
         </Link>
 
+        {/* Guest conversion banner */}
+        {!isAuthenticated && showBanner && (
+          <div className="sticky top-20 z-30 mt-5 bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5">
+            <div className="flex items-start gap-3 sm:gap-4">
+              <Sparkles className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-amber-900 text-sm sm:text-base">
+                  Save this report and get 37% off forever
+                </h3>
+                <p className="text-sm text-amber-700 mt-1 leading-relaxed">
+                  Create a free account to save your scan history, compare deploys over time, and lock the early-bird pricing before public launch.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link
+                    href={`/register?next=/reports/${id}`}
+                    className="inline-flex items-center px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 transition-colors shadow-sm"
+                  >
+                    Sign Up Free
+                    <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setShowBanner(false)}
+                    className="text-sm text-amber-600 hover:text-amber-800 px-2 py-1 rounded-md hover:bg-amber-100/60 transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
-        <div className="mt-5 rounded-2xl border border-gray-200 bg-white overflow-hidden">
+        <div className={`rounded-2xl border border-gray-200 bg-white overflow-hidden ${!isAuthenticated && showBanner ? "mt-5" : "mt-5"}`}>
           <div className={`p-6 sm:p-8 bg-gradient-to-br ${scoreBg(report.overallScore)} border-b border-inherit`}>
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
               <div className="min-w-0">

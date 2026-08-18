@@ -67,7 +67,8 @@ enum SubscriptionStatus {
 
 model Check {
   id             String    @id @default(uuid())
-  userId         String
+  userId         String?   // nullable for guest scans (see guestId below)
+  guestId        String?   // anonymous guest identifier stored in cookie
   targetUrl      String    // The Vercel app URL to check (e.g. my-app.vercel.app)
   status         CheckStatus @default(QUEUED)
   progress       Int       @default(0)
@@ -85,10 +86,11 @@ model Check {
   completedAt    DateTime?
   createdAt      DateTime  @default(now())
 
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   report         Report?
 
   @@index([userId, createdAt])
+  @@index([guestId, createdAt])
   @@map("checks")
 }
 
@@ -102,7 +104,8 @@ enum CheckStatus {
 
 model Report {
   id             String    @id @default(uuid())
-  userId         String
+  userId         String?   // nullable for guest scans (see guestId below)
+  guestId        String?
   checkId        String    @unique
   targetUrl      String
 
@@ -124,11 +127,12 @@ model Report {
   createdAt      DateTime  @default(now())
   completedAt    DateTime?
 
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   check          Check     @relation(fields: [checkId], references: [id], onDelete: Cascade)
   findings       Finding[]
 
   @@index([userId, createdAt])
+  @@index([guestId, createdAt])
   @@map("reports")
 }
 
@@ -171,4 +175,18 @@ enum Severity {
   WARNING
   INFO
   PASS
+}
+
+model WaitlistEntry {
+  id         String   @id @default(uuid())
+  email      String
+  plan       Plan     @default(STARTER)
+  // optional context about the lead
+  message    String?
+  source     String?  // e.g. "pricing", "report-banner", "hero-cta"
+  createdAt  DateTime @default(now())
+
+  @@unique([email, plan])
+  @@index([createdAt])
+  @@map("waitlist_entries")
 }

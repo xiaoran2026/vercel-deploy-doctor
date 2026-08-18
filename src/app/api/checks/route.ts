@@ -1,11 +1,12 @@
 /**
  * GET /api/checks → list current user's checks (paginated, newest first)
  * POST /api/checks → create a new check, queue & run engine (MVP: inline)
+ * - Supports authenticated users (userId) and guests (guestId via cookie)
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/server/prisma";
-import { authenticateRequest } from "@/lib/server/auth";
+import { authenticateRequest, optionalAuthRequest, getOrCreateGuestId, setGuestCookie } from "@/lib/server/auth";
 import { ApiError, handleApiError, parseBody, validateBody } from "@/lib/server/validation";
 import { runCheckEngine } from "@/lib/server/checkEngine";
 import { PLANS } from "@/lib/planConfig";
@@ -100,22 +101,38 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await authenticateRequest(request);
+    const authResult = await optionalAuthRequest(request);
+    const isAuthenticated = "userId" in authResult;
+    let userId: string | null = null;
+    let guestId: string | null = null;
+    let response: NextResponse = NextResponse.next();
+
+    if (isAuthenticated) {
+      const uid = (authResult as any).userId as string;
+      userId = uid;
+      await ensureQuota(uid);
+      // Create subscription row if missing
+      await prisma.subscription.upsert({
+        where: { userId: uid },
+        update: {},
+        create: { userId: uid, plan: "FREE", status: "ACTIVE", checksUsedThisMonth: 0 },
+      });
+    } else {
+      // Guest user: get or issue guestId cookie
+      const { id: newGuestId, isNew } = getOrCreateGuestId(request);
+      guestId = newGuestId;
+      if (isNew) {
+        response = setGuestCookie(response, guestId) as NextResponse;
+      }
+    }
+
     const body = await parseBody(request);
     const input = validateBody(body, createSchema);
 
-    const { plan, usedThisMonth } = await ensureQuota(user.userId);
-
-    // Create subscription row if missing
-    await prisma.subscription.upsert({
-      where: { userId: user.userId },
-      update: {},
-      create: { userId: user.userId, plan: "FREE", status: "ACTIVE", checksUsedThisMonth: 0 },
-    });
-
     const check = await prisma.check.create({
       data: {
-        userId: user.userId,
+        userId: userId || null,
+        guestId: guestId || null,
         targetUrl: input.targetUrl.trim(),
         includeLighthouse: input.includeLighthouse,
         includeSecurity: input.includeSecurity,
@@ -130,83 +147,91 @@ export async function POST(request: Request) {
 
     // Run engine synchronously (Vercel Serverless freezes background tasks after response)
     try {
-        await prisma.check.update({
-          where: { id: check.id },
-          data: { progress: 35, currentStep: "Scanning HTTP headers, HTML meta & a11y" },
-        });
-        const result = await runCheckEngine(check.targetUrl, {
-          includeLighthouse: check.includeLighthouse,
-          includeSecurity: check.includeSecurity,
-          includePerformance: check.includePerformance,
-          includeConfig: check.includeConfig,
-        });
-        await prisma.check.update({
-          where: { id: check.id },
-          data: { progress: 70, currentStep: "Saving report & findings" },
-        });
+      await prisma.check.update({
+        where: { id: check.id },
+        data: { progress: 35, currentStep: "Scanning HTTP headers, HTML meta & a11y" },
+      });
+      const result = await runCheckEngine(check.targetUrl, {
+        includeLighthouse: check.includeLighthouse,
+        includeSecurity: check.includeSecurity,
+        includePerformance: check.includePerformance,
+        includeConfig: check.includeConfig,
+      });
+      await prisma.check.update({
+        where: { id: check.id },
+        data: { progress: 70, currentStep: "Saving report & findings" },
+      });
 
-        await prisma.report.create({
-          data: {
-            userId: user.userId,
-            checkId: check.id,
-            targetUrl: check.targetUrl,
-            overallScore: result.overall,
-            deployHealth: result.scores.deployHealth,
-            performanceScore: result.scores.performance,
-            accessibilityScore: result.scores.accessibility,
-            seoScore: result.scores.seo,
-            securityScore: result.scores.security,
-            summary: JSON.stringify(result.summary),
-            lighthouseData: result.lighthouseData ? JSON.stringify(result.lighthouseData) : null,
-            deployChecks: result.deployChecks ? JSON.stringify(result.deployChecks) : null,
-            findingsData: JSON.stringify(result.findings),
-            status: "COMPLETED",
-            completedAt: new Date(),
-            findings: {
-              createMany: {
-                data: result.findings.map((f) => ({
-                  category: f.category,
-                  severity: f.severity,
-                  title: f.title,
-                  description: f.description ?? null,
-                  recommendation: f.recommendation ?? null,
-                  ruleId: f.ruleId ?? null,
-                  impact: f.impact ?? null,
-                  docsUrl: f.docsUrl ?? null,
-                  meta: f.meta ? JSON.stringify(f.meta) : null,
-                })),
-              },
+      await prisma.report.create({
+        data: {
+          userId: userId || null,
+          guestId: guestId || null,
+          checkId: check.id,
+          targetUrl: check.targetUrl,
+          overallScore: result.overall,
+          deployHealth: result.scores.deployHealth,
+          performanceScore: result.scores.performance,
+          accessibilityScore: result.scores.accessibility,
+          seoScore: result.scores.seo,
+          securityScore: result.scores.security,
+          summary: JSON.stringify(result.summary),
+          lighthouseData: result.lighthouseData ? JSON.stringify(result.lighthouseData) : null,
+          deployChecks: result.deployChecks ? JSON.stringify(result.deployChecks) : null,
+          findingsData: JSON.stringify(result.findings),
+          status: "COMPLETED",
+          completedAt: new Date(),
+          findings: {
+            createMany: {
+              data: result.findings.map((f) => ({
+                category: f.category,
+                severity: f.severity,
+                title: f.title,
+                description: f.description ?? null,
+                recommendation: f.recommendation ?? null,
+                ruleId: f.ruleId ?? null,
+                impact: f.impact ?? null,
+                docsUrl: f.docsUrl ?? null,
+                meta: f.meta ? JSON.stringify(f.meta) : null,
+              })),
             },
           },
-        });
+        },
+      });
 
-        await prisma.check.update({
-          where: { id: check.id },
-          data: {
-            status: "COMPLETED",
-            progress: 100,
-            completedAt: new Date(),
-            currentStep: null,
-          },
-        });
+      await prisma.check.update({
+        where: { id: check.id },
+        data: {
+          status: "COMPLETED",
+          progress: 100,
+          completedAt: new Date(),
+          currentStep: null,
+        },
+      });
 
-        // Increment checks used this month
+      // Increment checks used this month (authenticated users only)
+      if (isAuthenticated && userId) {
+        const monthStart = new Date();
+        monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+        const usedThisMonth = await prisma.check.count({
+          where: { userId, createdAt: { gte: monthStart } },
+        });
         await prisma.subscription.updateMany({
-          where: { userId: user.userId },
-          data: { checksUsedThisMonth: usedThisMonth + 1 },
+          where: { userId },
+          data: { checksUsedThisMonth: usedThisMonth },
         });
-      } catch (e: any) {
-        const msg = e?.message ?? "Unknown engine error";
-        await prisma.check.update({
-          where: { id: check.id },
-          data: { status: "FAILED", errorMessage: msg, currentStep: null, completedAt: new Date() },
-        }).catch(() => {});
       }
+    } catch (e: any) {
+      const msg = e?.message ?? "Unknown engine error";
+      await prisma.check.update({
+        where: { id: check.id },
+        data: { status: "FAILED", errorMessage: msg, currentStep: null, completedAt: new Date() },
+      }).catch(() => {});
+    }
 
     // Re-fetch the check to return its final state
     const finalCheck = await prisma.check.findUnique({ where: { id: check.id }, include: { report: { select: { id: true, overallScore: true, status: true } } } });
 
-    return NextResponse.json({
+    const payload = {
       code: 201,
       message: "Check completed",
       data: {
@@ -215,6 +240,15 @@ export async function POST(request: Request) {
         progress: finalCheck?.progress ?? 100,
         currentStep: finalCheck?.currentStep ?? null,
         reportId: finalCheck?.report?.id ?? null,
+      },
+    };
+
+    // Preserve Set-Cookie headers from the guest cookie response
+    return new NextResponse(JSON.stringify(payload), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        ...Object.fromEntries(response.headers.entries()),
       },
     });
   } catch (err) {

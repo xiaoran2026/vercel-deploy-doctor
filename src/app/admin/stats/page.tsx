@@ -43,14 +43,17 @@ export default async function AdminStatsPage({
     checkCount,
     reportCount,
     findingCount,
+    waitlistCount,
     checksByStatus,
     recentUsers,
     recentChecks,
+    waitlistEntries,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.check.count(),
     prisma.report.count(),
     prisma.finding.count(),
+    prisma.waitlistEntry.count(),
     prisma.check.groupBy({
       by: ["status"],
       _count: { _all: true },
@@ -73,6 +76,10 @@ export default async function AdminStatsPage({
         user: { select: { email: true } },
         report: { select: { id: true, overallScore: true } },
       },
+    }),
+    prisma.waitlistEntry.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 50,
     }),
   ]);
 
@@ -121,12 +128,13 @@ export default async function AdminStatsPage({
           </div>
         </div>
 
-        {/* Big 4 KPI cards */}
-        <div className="mt-8 grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Big 5 KPI cards */}
+        <div className="mt-8 grid grid-cols-2 lg:grid-cols-5 gap-4">
           <KPI label="Users" value={userCount} accent="indigo" />
           <KPI label="Checks run" value={checkCount} accent="violet" />
           <KPI label="Reports" value={reportCount} accent="emerald" />
           <KPI label="Findings" value={findingCount} accent="amber" />
+          <KPI label="Waitlist" value={waitlistCount} accent="rose" />
         </div>
 
         {/* Secondary summary */}
@@ -244,7 +252,7 @@ export default async function AdminStatsPage({
                 {recentChecks.map((c) => (
                   <tr key={c.id}>
                     <td className="py-2.5 pr-4 pl-4 sm:pl-0 font-medium">
-                      {c.user.email}
+                      {c.user?.email ? c.user.email : <span className="text-gray-400 italic">Guest</span>}
                     </td>
                     <td className="py-2.5 pr-4 text-gray-600 font-mono text-[12px] truncate max-w-[220px]">
                       {c.targetUrl}
@@ -258,6 +266,41 @@ export default async function AdminStatsPage({
                     <td className="py-2.5 pr-4 text-gray-500">
                       {fmtDate(c.createdAt)}
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        {/* Waitlist entries */}
+        <Card title={`Waitlist entries · ${waitlistCount}`} className="mt-6">
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wider text-gray-500">
+                  <th className="py-2 pr-4 pl-4 sm:pl-0">Email</th>
+                  <th className="py-2 pr-4">Plan</th>
+                  <th className="py-2 pr-4">Source</th>
+                  <th className="py-2 pr-4">Joined</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {waitlistEntries.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-6 pl-4 sm:pl-0 text-sm text-gray-400">
+                      No waitlist entries yet.
+                    </td>
+                  </tr>
+                )}
+                {waitlistEntries.map((entry: any) => (
+                  <tr key={entry.id}>
+                    <td className="py-2.5 pr-4 pl-4 sm:pl-0 font-medium">
+                      {entry.email}
+                    </td>
+                    <td className="py-2.5 pr-4 text-gray-600">{entry.plan}</td>
+                    <td className="py-2.5 pr-4 text-gray-600">{entry.source || "—"}</td>
+                    <td className="py-2.5 pr-4 text-gray-500">{fmtDate(entry.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -281,13 +324,14 @@ function KPI({
 }: {
   label: string;
   value: number;
-  accent: "indigo" | "violet" | "emerald" | "amber";
+  accent: "indigo" | "violet" | "emerald" | "amber" | "rose";
 }) {
   const dot = {
     indigo: "bg-indigo-500",
     violet: "bg-violet-500",
     emerald: "bg-emerald-500",
     amber: "bg-amber-500",
+    rose: "bg-rose-500",
   }[accent];
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
