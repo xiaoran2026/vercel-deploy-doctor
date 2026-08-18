@@ -38,8 +38,9 @@ export function handleApiError(err: unknown): Response {
   if (err instanceof SyntaxError) return jsonError(400, 'BAD_JSON', 'Invalid JSON body');
   console.error('[api] Unhandled error:', err);
   const message = err instanceof Error ? err.message : 'Unknown error';
+  const stack = err instanceof Error ? err.stack : undefined;
   return NextResponse.json(
-    { error: 'INTERNAL_ERROR', message: process.env.NODE_ENV === 'production' ? 'Internal server error' : message },
+    { error: 'INTERNAL_ERROR', message, stack },
     { status: 500 }
   );
 }
