@@ -1,4 +1,9 @@
 {
   "buildCommand": "next build",
-  "installCommand": "npm install --no-audit --no-fund"
+  "installCommand": "npm install --no-audit --no-fund",
+  "functions": {
+    "src/app/api/checks/route.ts": {
+      "maxDuration": 60
+    }
+  }
 }
