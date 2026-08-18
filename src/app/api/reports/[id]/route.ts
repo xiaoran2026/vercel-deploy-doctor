@@ -3,6 +3,8 @@
  * - Accepts either reportId or checkId for robustness
  * - Supports authenticated users (userId matches) and guests (guestId matches via cookie)
  */
+export const maxDuration = 60;
+
 import { NextResponse } from "next/server";
 import prisma from "@/lib/server/prisma";
 import { optionalAuthRequest, extractGuestId } from "@/lib/server/auth";
