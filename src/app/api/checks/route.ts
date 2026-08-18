@@ -10,6 +10,7 @@ import { z } from "zod";
 import prisma from "@/lib/server/prisma";
 import { authenticateRequest, optionalAuthRequest, getOrCreateGuestId, setGuestCookie } from "@/lib/server/auth";
 import { ApiError, handleApiError, parseBody, validateBody } from "@/lib/server/validation";
+import { runCheckEngine } from "@/lib/server/checkEngine";
 import { PLANS } from "@/lib/planConfig";
 
 const createSchema = z.object({
@@ -156,29 +157,141 @@ export async function POST(request: Request) {
       },
     });
 
-    // TEMP: skip engine to test DB connection — return immediately
-    const payload = {
-      code: 201,
-      message: "Check created (engine skipped for testing)",
-      data: {
-        checkId: check.id,
-        status: "RUNNING",
-        progress: 10,
-        currentStep: "Probing target URL",
-        reportId: null,
-      },
-    };
-
-    const respHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    // Run engine synchronously (Vercel Serverless — must complete before response)
     try {
-      const setCookie = response.headers.get("set-cookie");
-      if (setCookie) respHeaders["Set-Cookie"] = setCookie;
-    } catch {}
+      await prisma.check.update({
+        where: { id: check.id },
+        data: { progress: 35, currentStep: "Scanning HTTP headers, HTML meta & a11y" },
+      });
 
-    return new NextResponse(JSON.stringify(payload), {
-      status: 200,
-      headers: respHeaders,
-    });
+      const result = await runCheckEngine(check.targetUrl, {
+        includeLighthouse: check.includeLighthouse,
+        includeSecurity: check.includeSecurity,
+        includePerformance: check.includePerformance,
+        includeConfig: check.includeConfig,
+      });
+
+      await prisma.check.update({
+        where: { id: check.id },
+        data: { progress: 70, currentStep: "Saving report & findings" },
+      });
+
+      const report = await prisma.report.create({
+        data: {
+          userId: userId || null,
+          guestId: guestId || null,
+          checkId: check.id,
+          targetUrl: check.targetUrl,
+          overallScore: result.overall,
+          deployHealth: result.scores.deployHealth,
+          performanceScore: result.scores.performance,
+          accessibilityScore: result.scores.accessibility,
+          seoScore: result.scores.seo,
+          securityScore: result.scores.security,
+          summary: JSON.stringify(result.summary),
+          lighthouseData: result.lighthouseData ? JSON.stringify(result.lighthouseData) : null,
+          deployChecks: result.deployChecks ? JSON.stringify(result.deployChecks) : null,
+          findingsData: JSON.stringify(result.findings),
+          status: "COMPLETED",
+          completedAt: new Date(),
+          findings: {
+            createMany: {
+              data: result.findings.map((f) => ({
+                category: f.category,
+                severity: f.severity,
+                title: f.title,
+                description: f.description ?? null,
+                recommendation: f.recommendation ?? null,
+                ruleId: f.ruleId ?? null,
+                impact: f.impact ?? null,
+                docsUrl: f.docsUrl ?? null,
+                meta: f.meta ? JSON.stringify(f.meta) : null,
+              })),
+            },
+          },
+        },
+      });
+
+      await prisma.check.update({
+        where: { id: check.id },
+        data: {
+          status: "COMPLETED",
+          progress: 100,
+          completedAt: new Date(),
+          currentStep: null,
+        },
+      });
+
+      if (isAuthenticated && userId) {
+        const monthStart = new Date();
+        monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+        const usedThisMonth = await prisma.check.count({
+          where: { userId, createdAt: { gte: monthStart } },
+        });
+        await prisma.subscription.updateMany({
+          where: { userId },
+          data: { checksUsedThisMonth: usedThisMonth },
+        });
+      }
+
+      const finalCheck = await prisma.check.findUnique({
+        where: { id: check.id },
+        include: { report: { select: { id: true, overallScore: true, status: true } } },
+      });
+
+      const payload = {
+        code: 201,
+        message: "Check completed",
+        data: {
+          checkId: check.id,
+          status: finalCheck?.status ?? "COMPLETED",
+          progress: finalCheck?.progress ?? 100,
+          currentStep: finalCheck?.currentStep ?? null,
+          reportId: report.id,
+        },
+      };
+
+      const respHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      try {
+        const setCookie = response.headers.get("set-cookie");
+        if (setCookie) respHeaders["Set-Cookie"] = setCookie;
+      } catch {}
+
+      return new NextResponse(JSON.stringify(payload), {
+        status: 200,
+        headers: respHeaders,
+      });
+    } catch (e: any) {
+      const msg = e?.message ?? "Unknown engine error";
+      await prisma.check.update({
+        where: { id: check.id },
+        data: { status: "FAILED", errorMessage: msg, currentStep: null, completedAt: new Date() },
+      }).catch(() => {});
+
+      const payload = {
+        code: 500,
+        message: "Check failed",
+        data: {
+          checkId: check.id,
+          status: "FAILED",
+          progress: check.progress,
+          currentStep: null,
+          errorMessage: msg,
+          reportId: null,
+        },
+      };
+
+      const respHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      try {
+        const setCookie = response.headers.get("set-cookie");
+        if (setCookie) respHeaders["Set-Cookie"] = setCookie;
+      } catch {}
+
+      return new NextResponse(JSON.stringify(payload), {
+        status: 200,
+        headers: respHeaders,
+      });
+    }
   } catch (err) {
     return handleApiError(err);
   }
