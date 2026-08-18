@@ -36,6 +36,23 @@ export async function GET(_request: Request, { params }: Params) {
           include: includeOpts,
         });
       }
+      // Fallback: report may have been created in guest mode (quota exceeded)
+      // Try guestId lookup if userId lookup failed
+      if (!report) {
+        const guestId = extractGuestId(_request);
+        if (guestId) {
+          report = await prisma.report.findUnique({
+            where: { id, guestId },
+            include: includeOpts,
+          });
+          if (!report) {
+            report = await prisma.report.findFirst({
+              where: { checkId: id, guestId },
+              include: includeOpts,
+            });
+          }
+        }
+      }
     } else {
       const guestId = extractGuestId(_request);
       if (!guestId) throw new ApiError("Unauthorized", 401, "UNAUTHORIZED");

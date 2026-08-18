@@ -114,20 +114,16 @@ export async function POST(request: Request) {
       userId = uid;
       try {
         await ensureQuota(uid);
-        // Create subscription row if missing
         await prisma.subscription.upsert({
           where: { userId: uid },
           update: {},
           create: { userId: uid, plan: "FREE", status: "ACTIVE", checksUsedThisMonth: 0 },
         });
       } catch (quotaErr) {
-        // Quota exceeded — fall back to guest mode so user can still scan
-        userId = null;
-        const { id: newGuestId, isNew } = getOrCreateGuestId(request);
-        guestId = newGuestId;
-        if (isNew) {
-          response = setGuestCookie(response, guestId) as NextResponse;
-        }
+        // Quota exceeded for an authenticated user — still allow the scan,
+        // but the report stays owned by the user (userId set, not guestId).
+        // This prevents the "404 report not found" issue when user views their
+        // own report after hitting the FREE plan limit.
       }
     } else {
       // Guest user: get or issue guestId cookie

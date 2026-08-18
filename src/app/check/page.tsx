@@ -64,7 +64,7 @@ export default function CheckPage() {
       if (payload.reportId) {
         setStatus("done");
         setProgress(100);
-        setTimeout(() => router.push(`/reports/${cid}`), 400);
+        setTimeout(() => router.push(`/reports/${payload.reportId}`), 400);
         return;
       }
 
@@ -86,7 +86,8 @@ export default function CheckPage() {
             if (s === "COMPLETED") {
               setStatus("done");
               setProgress(100);
-              setTimeout(() => router.push(`/reports/${cid}`), 400);
+              const rid = pollPayload.reportId ?? cid;
+              setTimeout(() => router.push(`/reports/${rid}`), 400);
             } else {
               setStatus("error");
               setError(pollPayload.errorMessage || "Scan failed. Please try again.");
