@@ -110,13 +110,23 @@ export async function POST(request: Request) {
     if (isAuthenticated) {
       const uid = (authResult as any).userId as string;
       userId = uid;
-      await ensureQuota(uid);
-      // Create subscription row if missing
-      await prisma.subscription.upsert({
-        where: { userId: uid },
-        update: {},
-        create: { userId: uid, plan: "FREE", status: "ACTIVE", checksUsedThisMonth: 0 },
-      });
+      try {
+        await ensureQuota(uid);
+        // Create subscription row if missing
+        await prisma.subscription.upsert({
+          where: { userId: uid },
+          update: {},
+          create: { userId: uid, plan: "FREE", status: "ACTIVE", checksUsedThisMonth: 0 },
+        });
+      } catch (quotaErr) {
+        // Quota exceeded — fall back to guest mode so user can still scan
+        userId = null;
+        const { id: newGuestId, isNew } = getOrCreateGuestId(request);
+        guestId = newGuestId;
+        if (isNew) {
+          response = setGuestCookie(response, guestId) as NextResponse;
+        }
+      }
     } else {
       // Guest user: get or issue guestId cookie
       const { id: newGuestId, isNew } = getOrCreateGuestId(request);
