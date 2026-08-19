@@ -118,6 +118,37 @@ export default function ReportPage() {
   const [sevFilter, setSevFilter] = useState<SeverityFilter>("ALL");
   const [showBanner, setShowBanner] = useState(true);
 
+  // Waitlist inline form state
+  const [wlEmail, setWlEmail] = useState("");
+  const [wlSubmitting, setWlSubmitting] = useState(false);
+  const [wlDone, setWlDone] = useState(false);
+  const [wlError, setWlError] = useState<string | null>(null);
+
+  const submitWaitlist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = wlEmail.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setWlError("Please enter a valid email.");
+      return;
+    }
+    setWlSubmitting(true);
+    setWlError(null);
+    try {
+      await api.post("/waitlist", { email, plan: "STARTER", source: "report-banner" });
+      setWlDone(true);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message;
+      // Already on waitlist is also success
+      if (msg && /already|exists/i.test(msg)) {
+        setWlDone(true);
+      } else {
+        setWlError(msg || "Something went wrong. Try again.");
+      }
+    } finally {
+      setWlSubmitting(false);
+    }
+  };
+
   const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -210,34 +241,98 @@ export default function ReportPage() {
           <ArrowLeft className="w-4 h-4" /> {isAuthenticated ? "Back to dashboard" : "Back to home"}
         </Link>
 
-        {/* Guest conversion banner */}
+        {/* Guest conversion banner — inline Waitlist CTA */}
         {!isAuthenticated && showBanner && (
-          <div className="sticky top-20 z-30 mt-5 bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5">
+          <div className="sticky top-20 z-30 mt-5 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 sm:p-5 shadow-sm">
             <div className="flex items-start gap-3 sm:gap-4">
-              <Sparkles className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-amber-900 text-sm sm:text-base">
-                  Save this report and get 37% off forever
-                </h3>
-                <p className="text-sm text-amber-700 mt-1 leading-relaxed">
-                  Create a free account to save your scan history, compare deploys over time, and lock the early-bird pricing before public launch.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Link
-                    href={`/register?next=/reports/${id}`}
-                    className="inline-flex items-center px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 transition-colors shadow-sm"
-                  >
-                    Sign Up Free
-                    <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => setShowBanner(false)}
-                    className="text-sm text-amber-600 hover:text-amber-800 px-2 py-1 rounded-md hover:bg-amber-100/60 transition-colors"
-                  >
-                    Dismiss
-                  </button>
-                </div>
+                {wlDone ? (
+                  <div className="py-2">
+                    <h3 className="font-semibold text-amber-900 text-sm sm:text-base flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      You&apos;re on the list — 37% off locked in
+                    </h3>
+                    <p className="text-sm text-amber-700 mt-1.5 leading-relaxed">
+                      We&apos;ll email you before public launch. Want full scan history? Create a free account now.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Link
+                        href={`/register?next=/reports/${id}`}
+                        className="inline-flex items-center px-4 py-2 rounded-lg bg-gray-950 text-white text-sm font-semibold hover:bg-gray-800 transition-colors"
+                      >
+                        Create free account
+                        <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setShowBanner(false)}
+                        className="text-sm text-amber-700 hover:text-amber-900 px-2 py-1 rounded-md hover:bg-amber-100/60 transition-colors"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <h3 className="font-semibold text-amber-900 text-sm sm:text-base">
+                      Lock in 37% off forever · Join the early-bird waitlist
+                    </h3>
+                    <p className="text-sm text-amber-700 mt-1 leading-relaxed">
+                      Drop your email — we&apos;ll notify you before public launch with a permanent 37% discount code on all paid plans. No spam.
+                    </p>
+                    <form onSubmit={submitWaitlist} className="mt-3 flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="email"
+                        value={wlEmail}
+                        onChange={(e) => {
+                          setWlEmail(e.target.value);
+                          if (wlError) setWlError(null);
+                        }}
+                        placeholder="you@example.com"
+                        disabled={wlSubmitting}
+                        className="flex-1 h-10 px-3 rounded-lg border border-amber-200 bg-white text-sm placeholder:text-amber-400/70 outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 min-w-0 disabled:opacity-60"
+                      />
+                      <button
+                        type="submit"
+                        disabled={wlSubmitting}
+                        className="inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 transition-colors whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {wlSubmitting ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            Joining...
+                          </>
+                        ) : (
+                          <>
+                            Claim 37% off
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </>
+                        )}
+                      </button>
+                    </form>
+                    {wlError && (
+                      <p className="mt-1.5 text-xs text-red-600">{wlError}</p>
+                    )}
+                    <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-amber-700/80">
+                      <Link
+                        href={`/register?next=/reports/${id}`}
+                        className="font-semibold text-amber-900 hover:text-amber-950 underline underline-offset-2"
+                      >
+                        or create a free account →
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setShowBanner(false)}
+                        className="text-amber-600 hover:text-amber-800"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
